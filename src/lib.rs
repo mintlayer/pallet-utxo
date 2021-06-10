@@ -1,13 +1,20 @@
 // #![cfg_attr(not(feature = "std"), no_std)]
 
+use sp_core::sr25519::{Public as SR25Pub, Signature as SR25Sig};
+
+pub trait Aura {
+    /// TODO: call `fn authorities()` from pallets-aura
+    fn authorities() -> Vec<SR25Pub>;
+}
+
 #[frame_support::pallet]
 pub mod pallet {
+    use super::*;
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::*;
-    use sp_io::crypto;
-    use sp_core::sr25519::{Public as SR25Pub, Signature as SR25Sig};
-    use sp_runtime::traits::{BlakeTwo256, Hash, SaturatedConversion};
     use primitive_types::{H256, H512};
+    use sp_io::crypto;
+    use sp_runtime::traits::{BlakeTwo256, Hash, SaturatedConversion};
 
     use core::marker::PhantomData;
     use std::collections::BTreeMap;
@@ -22,10 +29,12 @@ pub mod pallet {
     #[pallet::config]
     pub trait Config: frame_system::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+
+        type Aura: Aura;
     }
 
     #[derive(
-        Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash, Default
+        Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash, Default,
     )]
     pub struct TransactionInput {
         pub(crate) outpoint: H256,
@@ -33,7 +42,7 @@ pub mod pallet {
     }
 
     #[derive(
-        Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash, Default
+        Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash, Default,
     )]
     pub struct TransactionOutput {
         pub(crate) value: Value,
@@ -63,7 +72,10 @@ pub mod pallet {
 
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-        fn on_finalize(_n: T::BlockNumber) {}
+        fn on_finalize(block_num: T::BlockNumber) {
+            let auth: Vec<_> = T::Aura::authorities().iter().map(|x| x.0.into()).collect();
+            disperse_reward::<T>(&auth, block_num)
+        }
     }
 
     // Strips a transaction of its Signature fields by replacing value with ZERO-initialized fixed hash.
@@ -249,7 +261,7 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         #[pallet::weight(1_000)] // <--- haven't figured out what's this for
-        pub fn spend(origin: OriginFor<T>, tx: Transaction) -> DispatchResultWithPostInfo {
+        pub fn spend(_origin: OriginFor<T>, tx: Transaction) -> DispatchResultWithPostInfo {
             let tx_validity = validate_transaction::<T>(&tx)?;
 
             update_storage::<T>(&tx, tx_validity.priority as Value)?;
