@@ -1,23 +1,30 @@
-// #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
-use sp_core::sr25519::{Public as SR25Pub, Signature as SR25Sig};
+pub use pallet::*;
 
-pub trait Aura {
-    /// TODO: call `fn authorities()` from pallets-aura
-    fn authorities() -> Vec<SR25Pub>;
-}
+#[cfg(test)]
+mod mock;
+
+#[cfg(test)]
+mod tests;
 
 #[frame_support::pallet]
 pub mod pallet {
-    use super::*;
-    use frame_support::pallet_prelude::*;
+    use core::marker::PhantomData;
+    #[cfg(feature = "std")]
+    use serde::{Deserialize, Serialize};
+
+    use codec::{Decode, Encode};
+    use frame_support::{
+        dispatch::{DispatchResultWithPostInfo, Vec},
+        pallet_prelude::*,
+    };
     use frame_system::pallet_prelude::*;
     use primitive_types::{H256, H512};
+    use sp_core::sr25519::{Public as SR25Pub, Signature as SR25Sig};
     use sp_io::crypto;
     use sp_runtime::traits::{BlakeTwo256, Hash, SaturatedConversion};
-
-    use core::marker::PhantomData;
-    use std::collections::BTreeMap;
+    use sp_std::collections::btree_map::BTreeMap;
 
     pub type Value = u128;
 
@@ -30,9 +37,11 @@ pub mod pallet {
     pub trait Config: frame_system::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
-        type Aura: Aura;
+        // let the user implement on how to get the authorities.
+        fn authorities() -> Vec<H256>;
     }
 
+    #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
     #[derive(
         Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash, Default,
     )]
@@ -41,6 +50,7 @@ pub mod pallet {
         pub(crate) sig_script: H512,
     }
 
+    #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
     #[derive(
         Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash, Default,
     )]
@@ -49,6 +59,7 @@ pub mod pallet {
         pub(crate) pub_key: H256,
     }
 
+    #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
     #[derive(Clone, Encode, Decode, Eq, PartialEq, RuntimeDebug, Hash, Default)]
     pub struct Transaction {
         pub(crate) inputs: Vec<TransactionInput>,
@@ -73,8 +84,7 @@ pub mod pallet {
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_finalize(block_num: T::BlockNumber) {
-            let auth: Vec<_> = T::Aura::authorities().iter().map(|x| x.0.into()).collect();
-            disperse_reward::<T>(&auth, block_num)
+            disperse_reward::<T>(&T::authorities(), block_num)
         }
     }
 
@@ -144,7 +154,7 @@ pub mod pallet {
             //we want map size and input size to be equal to ensure each is used only once
             ensure!(
                 input_map.len() == tx.inputs.len(),
-                "each input should be used once"
+                "each input should be used only once"
             );
         }
         //ensure each output is unique
@@ -189,7 +199,7 @@ pub mod pallet {
                     "signature must be valid"
                 );
                 total_input = total_input
-                    .checked_sub(input_utxo.value)
+                    .checked_add(input_utxo.value)
                     .ok_or("input value overflow")?;
             } else {
                 missing_utxos.push(input.outpoint.clone().as_fixed_bytes().to_vec());
@@ -198,10 +208,10 @@ pub mod pallet {
 
         // Check that outputs are valid
         for output in tx.outputs.iter() {
-            ensure!(output.value == 0, "output value must be nonzero");
+            ensure!(output.value > 0, "output value must be nonzero");
             let hash = BlakeTwo256::hash_of(&(&tx.encode(), output_index));
             output_index = output_index.checked_add(1).ok_or("output index overflow")?;
-            ensure!(<UtxoStore<T>>::contains_key(hash), "output already exists");
+            ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
 
             // checked add bug in example cod where it uses checked_sub
             total_output = total_output
@@ -211,7 +221,7 @@ pub mod pallet {
         }
 
         // if no race condition, check the math
-        if !missing_utxos.is_empty() {
+        if missing_utxos.is_empty() {
             ensure!(
                 total_input >= total_output,
                 "output value must not exceed input value"
@@ -236,7 +246,7 @@ pub mod pallet {
         tx: &Transaction,
         reward: Value,
     ) -> DispatchResultWithPostInfo {
-        // Clculate new reward total
+        // Calculate new reward total
         let new_total = <RewardTotal<T>>::get()
             .checked_add(reward)
             .ok_or("Reward overflow")?;
@@ -263,6 +273,7 @@ pub mod pallet {
         #[pallet::weight(1_000)] // <--- haven't figured out what's this for
         pub fn spend(_origin: OriginFor<T>, tx: Transaction) -> DispatchResultWithPostInfo {
             let tx_validity = validate_transaction::<T>(&tx)?;
+            ensure!(tx_validity.requires.is_empty(), "missing inputs");
 
             update_storage::<T>(&tx, tx_validity.priority as Value)?;
 
@@ -274,15 +285,25 @@ pub mod pallet {
     #[pallet::genesis_config]
     pub struct GenesisConfig<T: Config> {
         pub genesis_utxos: Vec<TransactionOutput>,
+        pub _marker: PhantomData<T>,
+    }
+
+    #[cfg(feature = "std")]
+    impl<T: Config> Default for GenesisConfig<T> {
+        fn default() -> Self {
+            Self {
+                genesis_utxos: vec![],
+                _marker: Default::default(),
+            }
+        }
     }
 
     #[pallet::genesis_build]
     impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
         fn build(&self) {
-            self.genesis_utxos
-                .iter()
-                .cloned()
-                .for_each(|u| UtxoStore::<T>::insert(BlakeTwo256::hash_of(&u), u));
+            self.genesis_utxos.iter().cloned().for_each(|u| {
+                UtxoStore::<T>::insert(BlakeTwo256::hash_of(&u), Some(u));
+            });
         }
     }
 }
