@@ -11,6 +11,8 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
+pub mod weights;
+
 #[frame_support::pallet]
 pub mod pallet {
     use core::marker::PhantomData;
@@ -21,12 +23,13 @@ pub mod pallet {
     use frame_support::{
         dispatch::{DispatchResultWithPostInfo, Vec},
         pallet_prelude::*,
+        traits::IsSubType,
     };
     use frame_system::pallet_prelude::*;
     use primitive_types::{H256, H512};
     use sp_core::sr25519::{Public as SR25Pub, Signature as SR25Sig};
     use sp_io::crypto;
-    use sp_runtime::traits::{BlakeTwo256, Hash, SaturatedConversion};
+    use sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash, SaturatedConversion};
     use sp_std::collections::btree_map::BTreeMap;
 
     pub type Value = u128;
@@ -40,8 +43,16 @@ pub mod pallet {
     pub trait Config: frame_system::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
-        // let the user implement on how to get the authorities.
+        /// The overarching call type.
+        type Call: Dispatchable + From<Call<Self>> + IsSubType<Call<Self>> + Clone;
+
+        type WeightInfo: WeightInfo;
+
         fn authorities() -> Vec<H256>;
+    }
+
+    pub trait WeightInfo {
+        fn spend(u: u32) -> Weight;
     }
 
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -51,6 +62,21 @@ pub mod pallet {
     pub struct TransactionInput {
         pub(crate) outpoint: H256,
         pub(crate) sig_script: H512,
+    }
+
+    impl TransactionInput {
+        pub fn new(outpoint: H256, sig_script: H512) -> Self {
+            Self {
+                outpoint,
+                sig_script,
+            }
+        }
+    }
+
+    impl TransactionOutput {
+        pub fn new(value: Value, pub_key: H256) -> Self {
+            Self { value, pub_key }
+        }
     }
 
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -273,7 +299,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        #[pallet::weight(1_000)] // <--- haven't figured out what's this for
+        #[pallet::weight(T::WeightInfo::spend(tx.inputs.len().saturating_add(tx.outputs.len()) as u32))]
         pub fn spend(_origin: OriginFor<T>, tx: Transaction) -> DispatchResultWithPostInfo {
             let tx_validity = validate_transaction::<T>(&tx)?;
             ensure!(tx_validity.requires.is_empty(), "missing inputs");

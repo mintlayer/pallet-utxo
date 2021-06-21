@@ -11,8 +11,7 @@ use sp_runtime::{
 };
 
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-
-// use sp_std::vec;
+use sp_std::vec;
 
 // need to manually import this crate since its no include by default
 use hex_literal::hex;
@@ -88,6 +87,8 @@ impl pallet_aura::Config for Test {
 
 impl pallet_utxo::Config for Test {
     type Event = Event;
+    type Call = Call;
+    type WeightInfo = crate::weights::WeightInfo<Test>;
 
     fn authorities() -> Vec<H256> {
         Aura::authorities()
@@ -107,6 +108,8 @@ fn create_pub_key(keystore: &KeyStore, phrase: &str) -> Public {
 pub fn new_test_ext() -> TestExternalities {
     let keystore = KeyStore::new(); // a key storage to store new key pairs during testing
     let alice_pub_key = create_pub_key(&keystore, ALICE_PHRASE);
+    println!("alice pub key: {:?}", alice_pub_key.0);
+    println!("gensis: {:?}", GENESIS_UTXO);
 
     let mut t = frame_system::GenesisConfig::default()
         .build_storage::<Test>()
