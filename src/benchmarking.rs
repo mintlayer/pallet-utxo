@@ -2,12 +2,13 @@ use super::*;
 
 use crate::{Pallet as Utxo, Transaction, TransactionInput, TransactionOutput};
 use codec::Encode;
-use frame_benchmarking::{benchmarks, impl_benchmark_test_suite, whitelisted_caller};
+use frame_benchmarking::{benchmarks, whitelisted_caller};
 use frame_system::{EventRecord, RawOrigin};
-use sp_core::{sp_std::str::FromStr, sp_std::vec, sr25519::Public, testing::SR25519, H256, H512};
+use sp_core::{sp_std::vec, sr25519::Public, testing::SR25519, H256, H512};
+use hex_literal::hex;
 
 fn assert_last_event<T: Config>(generic_event: <T as Config>::Event) {
-    let events = frame_system::Module::<T>::events();
+    let events = frame_system::Pallet::<T>::events();
     let system_event: <T as frame_system::Config>::Event = generic_event.into();
 
     let EventRecord { event, .. } = &events[events.len() - 1];
@@ -17,11 +18,16 @@ fn assert_last_event<T: Config>(generic_event: <T as Config>::Event) {
 benchmarks! {
     // only for test
     test_spend {
-        let alice_pub_key = Public::from_str("5Gq2jqhDKtUScUzm9yCJGDDnhYQ8QHuMWiEzzKpjxma9n57R").unwrap();
-        println!("alice pub key: {:?}", alice_pub_key.0);
-        let alice_h256 = H256::from(alice_pub_key.clone());
-        let genesis_utxo = H256::from_str("0x79eabcbd5ef6e958c6a7851b36da07691c19bda1835a08f875aa286911800999").unwrap();
-        println!("genesis utxo: {:?}", genesis_utxo.0);
+        // 5Gq2jqhDKtUScUzm9yCJGDDnhYQ8QHuMWiEzzKpjxma9n57R
+        let alice_h256 = H256::from([
+            210, 191, 75, 132, 77, 254, 253, 103, 114, 168,
+            132, 62, 102, 159, 148, 52, 8, 150, 106, 151, 126,
+            58, 226, 175, 29, 215, 142, 15, 85, 244, 223, 103
+        ]);
+        let alice_pub_key = Public::from_h256(alice_h256.clone());
+
+        let genesis_utxo = hex!("79eabcbd5ef6e958c6a7851b36da07691c19bda1835a08f875aa286911800999");
+        let genesis_utxo = H256::from(genesis_utxo);
 
          let mut tx = Transaction {
             inputs: vec![TransactionInput {

@@ -110,8 +110,6 @@ fn create_pub_key(keystore: &KeyStore, phrase: &str) -> Public {
 pub fn new_test_ext() -> TestExternalities {
     let keystore = KeyStore::new(); // a key storage to store new key pairs during testing
     let alice_pub_key = create_pub_key(&keystore, ALICE_PHRASE);
-    println!("alice pub key: {:?}", alice_pub_key.0);
-    println!("gensis: {:?}", GENESIS_UTXO);
 
     let mut t = frame_system::GenesisConfig::default()
         .build_storage::<Test>()
