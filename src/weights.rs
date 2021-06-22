@@ -27,7 +27,7 @@
 #![allow(unused_imports)]
 
 use frame_support::{traits::Get, weights::Weight};
-use sp_std::marker::PhantomData;
+use sp_core::sp_std::marker::PhantomData;
 
 /// Weight functions for pallet_utxo.
 pub struct WeightInfo<T>(PhantomData<T>);

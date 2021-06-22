@@ -4,9 +4,7 @@ use crate::{Pallet as Utxo, Transaction, TransactionInput, TransactionOutput};
 use codec::Encode;
 use frame_benchmarking::{benchmarks, impl_benchmark_test_suite, whitelisted_caller};
 use frame_system::{EventRecord, RawOrigin};
-use primitive_types::{H256, H512};
-use sp_core::{sp_std::str::FromStr, sr25519::Public, testing::SR25519};
-use sp_std::vec;
+use sp_core::{sp_std::str::FromStr, sp_std::vec, sr25519::Public, testing::SR25519, H256, H512};
 
 fn assert_last_event<T: Config>(generic_event: <T as Config>::Event) {
     let events = frame_system::Module::<T>::events();
@@ -17,6 +15,37 @@ fn assert_last_event<T: Config>(generic_event: <T as Config>::Event) {
 }
 
 benchmarks! {
+    // only for test
+    test_spend {
+        let alice_pub_key = Public::from_str("5Gq2jqhDKtUScUzm9yCJGDDnhYQ8QHuMWiEzzKpjxma9n57R").unwrap();
+        println!("alice pub key: {:?}", alice_pub_key.0);
+        let alice_h256 = H256::from(alice_pub_key.clone());
+        let genesis_utxo = H256::from_str("0x79eabcbd5ef6e958c6a7851b36da07691c19bda1835a08f875aa286911800999").unwrap();
+        println!("genesis utxo: {:?}", genesis_utxo.0);
+
+         let mut tx = Transaction {
+            inputs: vec![TransactionInput {
+                outpoint: genesis_utxo,
+                sig_script: H512::zero(),
+            }],
+            outputs: vec![TransactionOutput {
+                value: 50,
+                pub_key: alice_h256,
+            }],
+        };
+
+        let alice_sig = sp_io::crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
+
+        tx.inputs[0].sig_script = H512::from(alice_sig);
+
+        let caller: T::AccountId = whitelisted_caller();
+    }: spend(RawOrigin::Signed(caller),tx.clone())
+    verify {
+        assert_last_event::<T>(Event::TransactionSuccess(tx).into());
+        assert_eq!(RewardTotal::<T>::get(),50u128);
+        assert!(!UtxoStore::<T>::contains_key(genesis_utxo));
+    }
+
     runtime_spend {
         /// ran using mintlayer-node.
         // 0x76584168d10a20084082ed80ec71e2a783abbb8dd6eb9d4893b089228498e9ff
@@ -70,5 +99,20 @@ benchmarks! {
         assert_last_event::<T>(Event::TransactionSuccess(tx).into());
         assert_eq!(RewardTotal::<T>::get(),50u128);
         assert!(!UtxoStore::<T>::contains_key(genesis_utxo));
+    }
+}
+
+// only for test
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mock::{new_test_ext, Test};
+    use frame_support::assert_ok;
+
+    #[test]
+    fn spend() {
+        new_test_ext().execute_with(|| {
+            assert_ok!(test_benchmark_test_spend::<Test>());
+        });
     }
 }

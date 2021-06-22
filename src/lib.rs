@@ -23,14 +23,16 @@ pub mod pallet {
     use frame_support::{
         dispatch::{DispatchResultWithPostInfo, Vec},
         pallet_prelude::*,
+        sp_io::crypto,
+        sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash, SaturatedConversion},
         traits::IsSubType,
     };
     use frame_system::pallet_prelude::*;
-    use primitive_types::{H256, H512};
-    use sp_core::sr25519::{Public as SR25Pub, Signature as SR25Sig};
-    use sp_io::crypto;
-    use sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash, SaturatedConversion};
-    use sp_std::collections::btree_map::BTreeMap;
+    use sp_core::{
+        sp_std::collections::btree_map::BTreeMap,
+        sr25519::{Public as SR25Pub, Signature as SR25Sig},
+        H256, H512,
+    };
 
     pub type Value = u128;
 
@@ -157,8 +159,6 @@ pub mod pallet {
 
             if !<UtxoStore<T>>::contains_key(hash) {
                 <UtxoStore<T>>::insert(hash, Some(utxo));
-                sp_runtime::print("transaction reward sent to");
-                sp_runtime::print(hash.as_fixed_bytes() as &[u8]);
             }
         }
     }
@@ -264,7 +264,7 @@ pub mod pallet {
             priority: reward as u64,
             requires: missing_utxos,
             provides: new_utxos,
-            longevity: TransactionLongevity::max_value(),
+            longevity: TransactionLongevity::MAX,
             propagate: true,
         })
     }

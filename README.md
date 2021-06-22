@@ -3,8 +3,6 @@ Utxo support, based on [Substrate's workshop](https://github.com/substrate-devel
 
 This is only the pallet; no _node_ and _runtime_ implementation.
 
-<span style="color:red">**NOTE!!!** The test cases will not compile for this branch.</span> 
-
 ### How to run the benchmark in [mintlayer-node](https://github.com/mintlayer/mintlayer-node):
 1. Insert this pallet-utxo crate in [pallets directory](https://github.com/mintlayer/mintlayer-node/tree/master/pallets).  
 
@@ -46,7 +44,6 @@ This is only the pallet; no _node_ and _runtime_ implementation.
             match pallet_utxo::validate_transaction::<Runtime>(&tx) {
                 Ok(valid_tx) => { return Ok(valid_tx); }
                 Err(e) => {
-                    sp_runtime::print(e);
                     return Err(TransactionValidityError::Invalid(InvalidTransaction::Custom(1)));
                 }
             }
@@ -65,15 +62,12 @@ This is only the pallet; no _node_ and _runtime_ implementation.
     ```rust
     let genesis:Vec<pallet_utxo::TransactionOutput> = endowed_utxos.iter().map(|x| {
         let pub_key = H256::from_slice(x.as_slice());
-        println!("The public key: {:?}", x.0);
-        println!("The h256 pub key: {:?}", pub_key);
         let tx_output = pallet_utxo::TransactionOutput::new(
             100 as pallet_utxo::Value,
             pub_key
         );
     
         let blake_hash = BlakeTwo256::hash_of(&tx_output);
-        println!("blake hash: {:?}", blake_hash.0);
       
         tx_output
     }).collect();
