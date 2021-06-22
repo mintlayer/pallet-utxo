@@ -34,7 +34,7 @@ benchmarks! {
             }],
         };
 
-        let alice_sig = sp_io::crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
+        let alice_sig = frame_support::sp_io::crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
 
         tx.inputs[0].sig_script = H512::from(alice_sig);
 

@@ -12,16 +12,19 @@ std = [
     'frame-support/std',
     'frame-system/std',
     'frame-benchmarking/std',
-    'pallet-timestamp/std',
-    'pallet-aura/std',
-    'sp-consensus-aura/std',
-    'sp-core/std',
-    'sp-keystore/std'
+    'sp-core/std'
+]
+test = [
+        'pallet-timestamp/std',
+        'pallet-aura/std',
+        'sp-consensus-aura/std',
+        'sp-keystore/std'
 ]
 
 
 [dependencies]
 codec = {default-features = false, features = ['derive'], package = 'parity-scale-codec', version = '2.0.0'}
+hex-literal = "0.2.1"
 log = "0.4.8"
 serde = '1.0.119'
 
@@ -32,7 +35,6 @@ frame-system = { default-features = false, version ='3.0.0' ,git = 'https://gith
 sp-core = { default-features = false, version = '3.0.0', git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 
 [dev-dependencies]
-hex-literal = "0.2.1"
 sp-consensus-aura = { default-features = false, version = "0.9.0",  git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 sp-keystore = { default-features = false,  version = "0.9.0",  git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
 pallet-aura = { default-features = false, version = '3.0.0',  git = 'https://github.com/paritytech/substrate.git', tag = 'monthly-2021-05'}
