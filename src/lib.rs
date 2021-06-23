@@ -144,6 +144,7 @@ pub mod pallet {
             .ok_or("Sub underflow")
             .unwrap();
 
+        log::debug!("disperse_reward:: reward total: {:?}", new_total);
         <RewardTotal<T>>::put(remainder as Value);
 
         for authority in auths {
@@ -280,10 +281,12 @@ pub mod pallet {
             .checked_add(reward)
             .ok_or("Reward overflow")?;
 
+        log::debug!("update_storage:: reward total: {:?}", new_total);
         <RewardTotal<T>>::put(new_total);
 
         // Removing spent UTXOs
         for input in &tx.inputs {
+            log::debug!("removing {:?} in UtxoStore.", input.output);
             <UtxoStore<T>>::remove(input.outpoint);
         }
 
@@ -291,6 +294,7 @@ pub mod pallet {
         for output in &tx.outputs {
             let hash = BlakeTwo256::hash_of(&(&tx.encode(), index));
             index = index.checked_add(1).ok_or("output index overflow")?;
+            log::debug!("inserting to UtxoStore {:?} of value {} as key {:?}", output.pub_key, output.value, hash);
             <UtxoStore<T>>::insert(hash, Some(output));
         }
 
