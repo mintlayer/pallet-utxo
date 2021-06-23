@@ -144,7 +144,7 @@ pub mod pallet {
             .ok_or("Sub underflow")
             .unwrap();
 
-        log::debug!("disperse_reward:: reward total: {:?}", new_total);
+        log::debug!("disperse_reward:: reward total: {:?}", remainder);
         <RewardTotal<T>>::put(remainder as Value);
 
         for authority in auths {
@@ -286,7 +286,7 @@ pub mod pallet {
 
         // Removing spent UTXOs
         for input in &tx.inputs {
-            log::debug!("removing {:?} in UtxoStore.", input.output);
+            log::debug!("removing {:?} in UtxoStore.", input.outpoint);
             <UtxoStore<T>>::remove(input.outpoint);
         }
 
