@@ -1,13 +1,11 @@
 use crate::{mock::*, Transaction, TransactionInput, TransactionOutput, UtxoStore, Value};
 use codec::Encode;
-use frame_support::{assert_err, assert_noop, assert_ok};
-use primitive_types::{H256, H512};
-use sp_core::{sr25519::Public, testing::SR25519};
-use sp_io::crypto;
-use sp_runtime::traits::{BlakeTwo256, Hash};
-
-// use sp_std::vec;
-//     ^^^^^^^^^^^ I had to call this for non std?
+use frame_support::{
+    assert_err, assert_noop, assert_ok,
+    sp_io::crypto,
+    sp_runtime::traits::{BlakeTwo256, Hash},
+};
+use sp_core::{sp_std::vec, sr25519::Public, testing::SR25519, H256, H512};
 
 fn tx_input_gen_no_signature() -> TransactionInput {
     TransactionInput {

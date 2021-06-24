@@ -11,6 +11,8 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
+pub mod weights;
+
 #[frame_support::pallet]
 pub mod pallet {
     use core::marker::PhantomData;
@@ -21,13 +23,16 @@ pub mod pallet {
     use frame_support::{
         dispatch::{DispatchResultWithPostInfo, Vec},
         pallet_prelude::*,
+        sp_io::crypto,
+        sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash, SaturatedConversion},
+        traits::IsSubType,
     };
     use frame_system::pallet_prelude::*;
-    use primitive_types::{H256, H512};
-    use sp_core::sr25519::{Public as SR25Pub, Signature as SR25Sig};
-    use sp_io::crypto;
-    use sp_runtime::traits::{BlakeTwo256, Hash, SaturatedConversion};
-    use sp_std::collections::btree_map::BTreeMap;
+    use sp_core::{
+        sp_std::collections::btree_map::BTreeMap,
+        sr25519::{Public as SR25Pub, Signature as SR25Sig},
+        H256, H512,
+    };
 
     pub type Value = u128;
 
@@ -40,8 +45,16 @@ pub mod pallet {
     pub trait Config: frame_system::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
-        // let the user implement on how to get the authorities.
+        /// The overarching call type.
+        type Call: Dispatchable + From<Call<Self>> + IsSubType<Call<Self>> + Clone;
+
+        type WeightInfo: WeightInfo;
+
         fn authorities() -> Vec<H256>;
+    }
+
+    pub trait WeightInfo {
+        fn spend(u: u32) -> Weight;
     }
 
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -51,6 +64,21 @@ pub mod pallet {
     pub struct TransactionInput {
         pub(crate) outpoint: H256,
         pub(crate) sig_script: H512,
+    }
+
+    impl TransactionInput {
+        pub fn new(outpoint: H256, sig_script: H512) -> Self {
+            Self {
+                outpoint,
+                sig_script,
+            }
+        }
+    }
+
+    impl TransactionOutput {
+        pub fn new(value: Value, pub_key: H256) -> Self {
+            Self { value, pub_key }
+        }
     }
 
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -116,6 +144,7 @@ pub mod pallet {
             .ok_or("Sub underflow")
             .unwrap();
 
+        log::debug!("disperse_reward:: reward total: {:?}", remainder);
         <RewardTotal<T>>::put(remainder as Value);
 
         for authority in auths {
@@ -131,8 +160,6 @@ pub mod pallet {
 
             if !<UtxoStore<T>>::contains_key(hash) {
                 <UtxoStore<T>>::insert(hash, Some(utxo));
-                sp_runtime::print("transaction reward sent to");
-                sp_runtime::print(hash.as_fixed_bytes() as &[u8]);
             }
         }
     }
@@ -238,7 +265,7 @@ pub mod pallet {
             priority: reward as u64,
             requires: missing_utxos,
             provides: new_utxos,
-            longevity: TransactionLongevity::max_value(),
+            longevity: TransactionLongevity::MAX,
             propagate: true,
         })
     }
@@ -254,10 +281,12 @@ pub mod pallet {
             .checked_add(reward)
             .ok_or("Reward overflow")?;
 
+        log::debug!("update_storage:: reward total: {:?}", new_total);
         <RewardTotal<T>>::put(new_total);
 
         // Removing spent UTXOs
         for input in &tx.inputs {
+            log::debug!("removing {:?} in UtxoStore.", input.outpoint);
             <UtxoStore<T>>::remove(input.outpoint);
         }
 
@@ -265,6 +294,7 @@ pub mod pallet {
         for output in &tx.outputs {
             let hash = BlakeTwo256::hash_of(&(&tx.encode(), index));
             index = index.checked_add(1).ok_or("output index overflow")?;
+            log::debug!("inserting to UtxoStore {:?} of value {} as key {:?}", output.pub_key, output.value, hash);
             <UtxoStore<T>>::insert(hash, Some(output));
         }
 
@@ -273,7 +303,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        #[pallet::weight(1_000)] // <--- haven't figured out what's this for
+        #[pallet::weight(T::WeightInfo::spend(tx.inputs.len().saturating_add(tx.outputs.len()) as u32))]
         pub fn spend(_origin: OriginFor<T>, tx: Transaction) -> DispatchResultWithPostInfo {
             let tx_validity = validate_transaction::<T>(&tx)?;
             ensure!(tx_validity.requires.is_empty(), "missing inputs");

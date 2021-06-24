@@ -1,18 +1,18 @@
 use crate as pallet_utxo;
 use pallet_utxo::TransactionOutput;
 
-use frame_support::{parameter_types, traits::GenesisBuild};
-use sp_core::{sr25519::Public, testing::SR25519, H256};
-use sp_io::TestExternalities;
-use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
-use sp_runtime::{
-    testing::Header,
-    traits::{BlakeTwo256, IdentityLookup},
+use frame_support::{
+    parameter_types,
+    sp_io::TestExternalities,
+    sp_runtime::{
+        testing::Header,
+        traits::{BlakeTwo256, IdentityLookup},
+    },
+    traits::GenesisBuild,
 };
-
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-
-// use sp_std::vec;
+use sp_core::{sp_std::vec, sr25519::Public, testing::SR25519, H256};
+use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 
 // need to manually import this crate since its no include by default
 use hex_literal::hex;
@@ -32,10 +32,10 @@ frame_support::construct_runtime!(
         NodeBlock = Block,
         UncheckedExtrinsic = UncheckedExtrinsic,
     {
-        System: frame_system::{Module, Call, Config, Storage, Event<T>},
-        Timestamp: pallet_timestamp::{Module, Call, Storage, Inherent},
-        Utxo: pallet_utxo::{Module, Call, Config<T>, Storage, Event<T>},
-        Aura: pallet_aura::{Module, Call, Config<T>, Storage},
+        System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+        Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
+        Utxo: pallet_utxo::{Pallet, Call, Config<T>, Storage, Event<T>},
+        Aura: pallet_aura::{Pallet, Call, Config<T>, Storage},
     }
 );
 
@@ -72,6 +72,7 @@ impl frame_system::Config for Test {
     type OnKilledAccount = ();
     type SystemWeightInfo = ();
     type SS58Prefix = SS58Prefix;
+    type OnSetCode = ();
 }
 
 // required by pallet_aura
@@ -88,6 +89,8 @@ impl pallet_aura::Config for Test {
 
 impl pallet_utxo::Config for Test {
     type Event = Event;
+    type Call = Call;
+    type WeightInfo = crate::weights::WeightInfo<Test>;
 
     fn authorities() -> Vec<H256> {
         Aura::authorities()
