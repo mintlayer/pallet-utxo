@@ -3,7 +3,8 @@ Utxo support, based on [Substrate's workshop](https://github.com/substrate-devel
 
 This is only the pallet; no _node_ and _runtime_ implementation.
 
-To run the test cases, just run command `cargo test`.
+### How to run the test cases
+On the terminal, run `cargo test --features test`
 
 ### How to run the benchmark in [mintlayer-node](https://github.com/mintlayer/mintlayer-node):
 1. Insert this pallet-utxo crate in [pallets directory](https://github.com/mintlayer/mintlayer-node/tree/master/pallets).  
