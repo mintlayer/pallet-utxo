@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 pub use pallet::*;
+pub use header::*;
 
 #[cfg(test)]
 mod mock;
@@ -12,6 +13,7 @@ mod tests;
 mod benchmarking;
 
 pub mod weights;
+mod header;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -75,29 +77,9 @@ pub mod pallet {
         }
     }
 
-    #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash)]
-    pub enum SignatureMethod {
-        BLS,
-        Schnorr,
-        ZkSnark,
-    }
-
-    #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash)]
-    pub struct TXOutputHeader {
-        token_id: u64,
-        fee: u64,
-        sig_method: SignatureMethod,
-    }
-
-    impl Default for TXOutputHeader {
-        fn default() -> Self {
-            Self {
-                token_id: 0,
-                fee: 0,
-                sig_method: SignatureMethod::BLS,
-            }
+    impl TransactionOutput {
+        pub fn new(value: Value, pub_key: H256) -> Self {
+            Self { value, pub_key }
         }
     }
 
@@ -108,17 +90,6 @@ pub mod pallet {
     pub struct TransactionOutput {
         pub(crate) value: Value,
         pub(crate) pub_key: H256,
-        pub(crate) header: TXOutputHeader,
-    }
-
-    impl TransactionOutput {
-        pub fn new(value: Value, pub_key: H256) -> Self {
-            Self {
-                value,
-                pub_key,
-                header: Default::default(),
-            }
-        }
     }
 
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -179,7 +150,10 @@ pub mod pallet {
         <RewardTotal<T>>::put(remainder as Value);
 
         for authority in auths {
-            let utxo = TransactionOutput::new(share_value, *authority);
+            let utxo = TransactionOutput {
+                value: share_value,
+                pub_key: *authority,
+            };
 
             let hash = {
                 let b_num = block_number.saturated_into::<u64>();
