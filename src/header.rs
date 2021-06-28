@@ -88,7 +88,6 @@ impl TokenType {
 
     pub(crate) fn insert_fee_type(header: TXOutputHeader, token_type: TokenType) -> TXOutputHeader {
         let new_header = header & 0b1_000000_111111_111;
-        println!("original header: {} new header: {}", header, new_header);
         let token_type = token_type as u16;
         let token_type = token_type * 64;
         new_header | token_type
