@@ -1,6 +1,6 @@
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
+use sp_core::sp_std::convert::TryFrom;
 
 use codec::{Decode, Encode};
 
@@ -17,7 +17,7 @@ macro_rules! u16_to_enum {
             $($(#[$vmeta])* $vname $(= $val)?,)*
         }
 
-        impl std::convert::TryFrom<u16> for $name {
+        impl TryFrom<u16> for $name {
             type Error = &'static str;
 
             fn try_from(v: u16) -> Result<Self, Self::Error> {
