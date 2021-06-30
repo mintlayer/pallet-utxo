@@ -48,12 +48,12 @@ impl SignatureMethod {
     }
 
     pub(crate) fn insert(
-        header: TXOutputHeader,
+        header: &mut TXOutputHeader,
         signature_method: SignatureMethod,
-    ) -> TXOutputHeader {
-        let header = header & 0b1_111111_111111_000; // remove the original signature, if any.
+    ) {
+        *header = header.clone() & 0b1_111111_111111_000; // remove the original signature, if any.
         let signature_method = signature_method as u16;
-        header | signature_method
+        *header = header.clone() | signature_method;
     }
 }
 
@@ -78,19 +78,19 @@ impl TokenType {
     }
 
     pub(crate) fn insert_value_type(
-        header: TXOutputHeader,
+        header: &mut TXOutputHeader,
         token_type: TokenType,
-    ) -> TXOutputHeader {
-        let header = header & 0b1_111111_000000_111; // remove original token type, if any.
+    ) {
+        *header = header.clone() & 0b1_111111_000000_111; // remove original token type, if any.
         let token_type = token_type as u16;
-        header | token_type
+        *header = header.clone() | token_type;
     }
 
-    pub(crate) fn insert_fee_type(header: TXOutputHeader, token_type: TokenType) -> TXOutputHeader {
-        let new_header = header & 0b1_000000_111111_111;
+    pub(crate) fn insert_fee_type(header: &mut TXOutputHeader, token_type: TokenType) {
+        *header = header.clone() & 0b1_000000_111111_111;
         let token_type = token_type as u16;
         let token_type = token_type * 64;
-        new_header | token_type
+        *header = header.clone() | token_type;
     }
 }
 
@@ -171,13 +171,13 @@ mod tests {
         let x = 0b10_111; // last 3 bits is are, and it's not yet supported.
         assert_err!(SignatureMethod::extract(x), "unsupported SignatureMethod");
 
-        let header: TXOutputHeader = 185u16; // last 3 bits are 001. Convert to 000 for BLS.
-        let new_header = SignatureMethod::insert(header, SignatureMethod::BLS);
-        assert_eq!(new_header, 184);
+        let mut header: TXOutputHeader = 185u16; // last 3 bits are 001. Convert to 000 for BLS.
+        SignatureMethod::insert(&mut header, SignatureMethod::BLS);
+        assert_eq!(header, 184);
 
-        let header: TXOutputHeader = new_header; // last 3 are 000. Convert to 010 for ZkSnark.
-        let new_header = SignatureMethod::insert(header, SignatureMethod::ZkSnark);
-        assert_eq!(new_header, 186);
+        // last 3 bits of header are 000. Convert to 010 for ZkSnark.
+        SignatureMethod::insert(&mut header, SignatureMethod::ZkSnark);
+        assert_eq!(header, 186);
     }
 
     #[test]
@@ -199,13 +199,13 @@ mod tests {
         let x = 0b110001_000;
         assert_err!(TokenType::extract_for_value(x), "unsupported TokenType");
 
-        let improper_header = 321u16; // 101000_001, and must be converted to 10_001.
-        let new_header = TokenType::insert_value_type(improper_header, TokenType::BTC);
-        assert_eq!(new_header, 17);
+        let mut improper_header = 321u16; // 101000_001, and must be converted to 10_001.
+        TokenType::insert_value_type(&mut improper_header, TokenType::BTC);
+        assert_eq!(improper_header, 17);
 
-        let improper_header = 178u16; // 10110_010, and must be converted to 000000_010 or 2.
-        let new_header = TokenType::insert_value_type(improper_header, TokenType::MLT);
-        assert_eq!(new_header, 2);
+        improper_header = 178u16; // 10110_010, and must be converted to 000000_010 or 2.
+        TokenType::insert_value_type(&mut improper_header, TokenType::MLT);
+        assert_eq!(improper_header, 2);
     }
 
     #[test]
@@ -222,12 +222,12 @@ mod tests {
         let x = 0b11_000000_111;
         assert_err!(TokenType::extract_for_fee(x), "unsupported TokenType");
 
-        let header = 1033u16; //10_000001_001, and convert token to MLT, or 9.
-        let new_header = TokenType::insert_fee_type(header, TokenType::MLT);
-        assert_eq!(new_header, 9);
+        let mut header = 1033u16; //10_000001_001, and convert token to MLT, or 9.
+        TokenType::insert_fee_type(&mut header, TokenType::MLT);
+        assert_eq!(header, 9);
 
-        let improper_header = 386u16; // 110000_010 convert to token ETH: 1_110000_010
-        let new_header = TokenType::insert_fee_type(improper_header, TokenType::ETH);
-        assert_eq!(new_header, 898);
+        let mut improper_header = 386u16; // 110000_010 convert to token ETH: 1_110000_010
+        TokenType::insert_fee_type(&mut improper_header, TokenType::ETH);
+        assert_eq!(improper_header, 898);
     }
 }
