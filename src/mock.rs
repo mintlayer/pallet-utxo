@@ -22,8 +22,10 @@ pub type Block = frame_system::mocking::MockBlock<Test>;
 
 pub const ALICE_PHRASE: &str =
     "news slush supreme milk chapter athlete soap sausage put clutch what kitten";
+
+// BlakeHash of TransactionOutput::new(100, H256::from(alice_pub_key)) in fn new_test_ext()
 pub const GENESIS_UTXO: [u8; 32] =
-    hex!("79eabcbd5ef6e958c6a7851b36da07691c19bda1835a08f875aa286911800999");
+    hex!("931fe49afe365072e71771cd99e13cfb54fa28fad479e23556ff9de6a3dd19a9");
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
@@ -114,11 +116,9 @@ pub fn new_test_ext() -> TestExternalities {
     let mut t = frame_system::GenesisConfig::default()
         .build_storage::<Test>()
         .unwrap();
+
     pallet_utxo::GenesisConfig::<Test> {
-        genesis_utxos: vec![TransactionOutput {
-            value: 100,
-            pub_key: H256::from(alice_pub_key),
-        }],
+        genesis_utxos: vec![TransactionOutput::new(100, H256::from(alice_pub_key))],
         _marker: Default::default(),
     }
     .assimilate_storage(&mut t)
@@ -142,10 +142,7 @@ pub fn new_test_ext_and_keys() -> (TestExternalities, Public, Public) {
         .build_storage::<Test>()
         .unwrap();
     pallet_utxo::GenesisConfig::<Test> {
-        genesis_utxos: vec![TransactionOutput {
-            value: 100,
-            pub_key: H256::from(alice_pub_key),
-        }],
+        genesis_utxos: vec![TransactionOutput::new(100, H256::from(alice_pub_key))],
         _marker: Default::default(),
     }
     .assimilate_storage(&mut t)
