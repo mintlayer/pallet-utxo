@@ -102,7 +102,7 @@ pub fn validate_header(header: TXOutputHeader) -> Result<(), &'static str> {
     Ok(())
 }
 
-pub trait TXOutputHeaderImls {
+pub trait TXOutputHeaderImpls {
     fn set_value_token_type(&mut self, value_token_type: TokenType);
     fn set_fee_token_type(&mut self, fee_token_type: TokenType);
     fn set_signature_method(&mut self, signature_method: SignatureMethod);
