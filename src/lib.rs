@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub use header::*;
 pub use pallet::*;
+pub use header::*;
 
 #[cfg(test)]
 mod mock;
@@ -12,8 +12,8 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-mod header;
 pub mod weights;
+mod header;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -342,7 +342,7 @@ pub mod pallet {
         for output in &tx.outputs {
             let hash = BlakeTwo256::hash_of(&(&tx.encode(), index));
             index = index.checked_add(1).ok_or("output index overflow")?;
-            log::error!("inserting to UtxoStore {:?} as key {:?}", output, hash);
+            log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
             <UtxoStore<T>>::insert(hash, Some(output));
         }
 
