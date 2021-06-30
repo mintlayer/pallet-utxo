@@ -30,10 +30,7 @@ fn test_simple_tx() {
         // Alice wants to send herself a new utxo of value 50.
         let mut tx = Transaction {
             inputs: vec![tx_input_gen_no_signature()],
-            outputs: vec![TransactionOutput {
-                value: 50,
-                pub_key: H256::from(alice_pub_key),
-            }],
+            outputs: vec![TransactionOutput::new(50, H256::from(alice_pub_key))],
         };
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
@@ -57,10 +54,7 @@ fn attack_with_sending_to_own_account() {
                 outpoint: H256::zero(),
                 sig_script: H512::zero(),
             }],
-            outputs: vec![TransactionOutput {
-                value: 50,
-                pub_key: H256::from(karl_pub_key),
-            }],
+            outputs: vec![TransactionOutput::new(50, H256::from(karl_pub_key))],
         };
 
         let karl_sig = crypto::sr25519_sign(SR25519, &karl_pub_key, &tx.encode()).unwrap();
@@ -100,10 +94,7 @@ fn attack_by_double_counting_input() {
                 // a double spend of the same UTXO!
                 tx_input_gen_no_signature(),
             ],
-            outputs: vec![TransactionOutput {
-                value: 100,
-                pub_key: H256::from(alice_pub_key),
-            }],
+            outputs: vec![TransactionOutput::new(100, H256::from(alice_pub_key))],
         };
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
@@ -127,10 +118,7 @@ fn attack_with_invalid_signature() {
                 // Just a random signature!
                 sig_script: H512::random(),
             }],
-            outputs: vec![TransactionOutput {
-                value: 100,
-                pub_key: H256::from(alice_pub_key),
-            }],
+            outputs: vec![TransactionOutput::new(100, H256::from(alice_pub_key))],
         };
 
         assert_err!(
@@ -145,11 +133,8 @@ fn attack_by_permanently_sinking_outputs() {
     execute_with_alice(|alice_pub_key| {
         let mut tx = Transaction {
             inputs: vec![tx_input_gen_no_signature()],
-            outputs: vec![TransactionOutput {
-                // A 0 value output burns this output forever!
-                value: 0,
-                pub_key: H256::from(alice_pub_key),
-            }],
+            //A 0 value output burns this output forever!
+            outputs: vec![TransactionOutput::new(0, H256::from(alice_pub_key))],
         };
 
         let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
@@ -168,15 +153,9 @@ fn attack_by_overflowing_value() {
         let mut tx = Transaction {
             inputs: vec![tx_input_gen_no_signature()],
             outputs: vec![
-                TransactionOutput {
-                    value: Value::MAX,
-                    pub_key: H256::from(alice_pub_key),
-                },
+                TransactionOutput::new(Value::MAX, H256::from(alice_pub_key)),
                 // Attempts to do overflow total output value
-                TransactionOutput {
-                    value: 10 as Value,
-                    pub_key: H256::from(alice_pub_key),
-                },
+                TransactionOutput::new(10, H256::from(alice_pub_key)),
             ],
         };
 
@@ -193,15 +172,9 @@ fn attack_by_overspending() {
         let mut tx = Transaction {
             inputs: vec![tx_input_gen_no_signature()],
             outputs: vec![
-                TransactionOutput {
-                    value: 100 as Value,
-                    pub_key: H256::from(alice_pub_key),
-                },
+                TransactionOutput::new(100, H256::from(alice_pub_key)),
                 // Creates 2 new utxo out of thin air
-                TransactionOutput {
-                    value: 2 as Value,
-                    pub_key: H256::from(alice_pub_key),
-                },
+                TransactionOutput::new(2, H256::from(alice_pub_key)),
             ],
         };
 

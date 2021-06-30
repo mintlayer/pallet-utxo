@@ -21,6 +21,7 @@ pub mod pallet {
     #[cfg(feature = "std")]
     use serde::{Deserialize, Serialize};
 
+    use crate::{validate_header, SignatureMethod, TXOutputHeader, TXOutputHeaderImpls, TokenType};
     use codec::{Decode, Encode};
     use frame_support::{
         dispatch::{DispatchResultWithPostInfo, Vec},
@@ -77,12 +78,6 @@ pub mod pallet {
         }
     }
 
-    impl TransactionOutput {
-        pub fn new(value: Value, pub_key: H256) -> Self {
-            Self { value, pub_key }
-        }
-    }
-
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
     #[derive(
         Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash, Default,
@@ -90,6 +85,51 @@ pub mod pallet {
     pub struct TransactionOutput {
         pub(crate) value: Value,
         pub(crate) pub_key: H256,
+        pub(crate) header: TXOutputHeader,
+    }
+
+    impl TransactionOutput {
+        /// By default the header is 0:
+        /// token type for both the value and fee is MLT,
+        /// and the signature method is BLS.
+        /// functions are available in TXOutputHeaderImpls to update the header.
+        pub fn new(value: Value, pub_key: H256) -> Self {
+            Self {
+                value,
+                pub_key,
+                header: 0,
+            }
+        }
+    }
+
+    impl TXOutputHeaderImpls for TransactionOutput {
+        fn set_value_token_type(&mut self, value_token_type: TokenType) {
+            TokenType::insert_value_type(&mut self.header, value_token_type);
+        }
+
+        fn set_fee_token_type(&mut self, fee_token_type: TokenType) {
+            TokenType::insert_fee_type(&mut self.header, fee_token_type);
+        }
+
+        fn set_signature_method(&mut self, signature_method: SignatureMethod) {
+            SignatureMethod::insert(&mut self.header, signature_method);
+        }
+
+        fn extract_value_token_type(&self) -> Result<TokenType, &'static str> {
+            TokenType::extract_for_value(self.header)
+        }
+
+        fn extract_fee_token_type(&self) -> Result<TokenType, &'static str> {
+            TokenType::extract_for_fee(self.header)
+        }
+
+        fn extract_signature_method(&self) -> Result<SignatureMethod, &'static str> {
+            SignatureMethod::extract(self.header)
+        }
+
+        fn validate_header(&self) -> Result<(), &'static str> {
+            validate_header(self.header)
+        }
     }
 
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -150,10 +190,9 @@ pub mod pallet {
         <RewardTotal<T>>::put(remainder as Value);
 
         for authority in auths {
-            let utxo = TransactionOutput {
-                value: share_value,
-                pub_key: *authority,
-            };
+            // TODO: where do we get the header info?
+            // TODO: are the rewards always of MLT token type?
+            let utxo = TransactionOutput::new(share_value, *authority);
 
             let hash = {
                 let b_num = block_number.saturated_into::<u64>();
@@ -245,6 +284,13 @@ pub mod pallet {
             output_index = output_index.checked_add(1).ok_or("output index overflow")?;
             ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
 
+            // Check the header is valid
+            let res = output.validate_header();
+            if let Err(e) = res {
+                log::error!("Header error: {}", e);
+            }
+            ensure!(res.is_ok(), "header error. Please check the logs.");
+
             // checked add bug in example cod where it uses checked_sub
             total_output = total_output
                 .checked_add(output.value)
@@ -296,7 +342,7 @@ pub mod pallet {
         for output in &tx.outputs {
             let hash = BlakeTwo256::hash_of(&(&tx.encode(), index));
             index = index.checked_add(1).ok_or("output index overflow")?;
-            log::debug!("inserting to UtxoStore {:?} of value {} as key {:?}", output.pub_key, output.value, hash);
+            log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
             <UtxoStore<T>>::insert(hash, Some(output));
         }
 
