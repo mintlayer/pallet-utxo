@@ -68,16 +68,11 @@ u16_to_enum! {
 }
 
 impl TokenType {
-    pub fn extract_for_value(header: TXOutputHeader) -> Result<TokenType, &'static str> {
+    pub fn extract(header: TXOutputHeader) -> Result<TokenType, &'static str> {
         TokenType::try_from(header & 504u16)
     }
 
-    pub fn extract_for_fee(header: TXOutputHeader) -> Result<TokenType, &'static str> {
-        let fee_bits = header >> 6;
-        Self::extract_for_value(fee_bits)
-    }
-
-    pub(crate) fn insert_value_type(
+    pub(crate) fn insert(
         header: &mut TXOutputHeader,
         token_type: TokenType,
     ) {
@@ -85,31 +80,21 @@ impl TokenType {
         let token_type = token_type as u16;
         *header = header.clone() | token_type;
     }
-
-    pub(crate) fn insert_fee_type(header: &mut TXOutputHeader, token_type: TokenType) {
-        *header = header.clone() & 0b1_000000_111111_111;
-        let token_type = token_type as u16;
-        let token_type = token_type * 64;
-        *header = header.clone() | token_type;
-    }
 }
 
 pub fn validate_header(header: TXOutputHeader) -> Result<(), &'static str> {
     SignatureMethod::extract(header)?;
-    TokenType::extract_for_value(header)?;
-    TokenType::extract_for_fee(header)?;
+    TokenType::extract(header)?;
 
     Ok(())
 }
 
 pub trait TXOutputHeaderImpls {
-    fn set_value_token_type(&mut self, value_token_type: TokenType);
-    fn set_fee_token_type(&mut self, fee_token_type: TokenType);
+    fn set_token_type(&mut self, value_token_type: TokenType);
     fn set_signature_method(&mut self, signature_method: SignatureMethod);
 
-    fn extract_value_token_type(&self) -> Result<TokenType, &'static str>;
-    fn extract_fee_token_type(&self) -> Result<TokenType, &'static str>;
-    fn extract_signature_method(&self) -> Result<SignatureMethod, &'static str>;
+    fn get_token_type(&self) -> Result<TokenType, &'static str>;
+    fn get_signature_method(&self) -> Result<SignatureMethod, &'static str>;
 
     fn validate_header(&self) -> Result<(), &'static str>;
 }
@@ -127,15 +112,9 @@ mod tests {
             "unsupported SignatureMethod"
         );
 
-        let improper_v_token_type = 0b11000_000u16;
+        let improper_token_type = 0b11000_000u16;
         assert_err!(
-            validate_header(improper_v_token_type),
-            "unsupported TokenType"
-        );
-
-        let improper_f_token_type = 0b11011_000001_001;
-        assert_err!(
-            validate_header(improper_f_token_type),
+            validate_header(improper_token_type),
             "unsupported TokenType"
         );
 
@@ -181,53 +160,30 @@ mod tests {
     }
 
     #[test]
-    fn value_token_types() {
+    fn token_types() {
         let x = 0b1010_000000_110; // the middle 6 bits are 000000, so type is MLT.
-        let value_type = TokenType::extract_for_value(x);
+        let value_type = TokenType::extract(x);
         assert!(value_type.is_ok());
         assert_eq!(value_type.unwrap(), TokenType::MLT);
 
         let x = 0b111_000001_011; // the middle 6 bits are 000001, so type is ETH.
-        assert_eq!(TokenType::extract_for_value(x).unwrap(), TokenType::ETH);
+        assert_eq!(TokenType::extract(x).unwrap(), TokenType::ETH);
 
         let x = 0b000010_101; // the first 6 bits are 000010, so type is BTC.
-        assert_eq!(TokenType::extract_for_value(x).unwrap(), TokenType::BTC);
+        assert_eq!(TokenType::extract(x).unwrap(), TokenType::BTC);
 
         let x = 3u16;
-        assert_eq!(TokenType::extract_for_value(x).unwrap(), TokenType::MLT);
+        assert_eq!(TokenType::extract(x).unwrap(), TokenType::MLT);
 
         let x = 0b110001_000;
-        assert_err!(TokenType::extract_for_value(x), "unsupported TokenType");
+        assert_err!(TokenType::extract(x), "unsupported TokenType");
 
         let mut improper_header = 321u16; // 101000_001, and must be converted to 10_001.
-        TokenType::insert_value_type(&mut improper_header, TokenType::BTC);
+        TokenType::insert(&mut improper_header, TokenType::BTC);
         assert_eq!(improper_header, 17);
 
         improper_header = 178u16; // 10110_010, and must be converted to 000000_010 or 2.
-        TokenType::insert_value_type(&mut improper_header, TokenType::MLT);
+        TokenType::insert(&mut improper_header, TokenType::MLT);
         assert_eq!(improper_header, 2);
-    }
-
-    #[test]
-    fn fee_token_types() {
-        let x = 0b110001_000;
-        assert_eq!(TokenType::extract_for_fee(x).unwrap(), TokenType::MLT);
-
-        let x = 0b001_000000_100; // extract 000001
-        assert_eq!(TokenType::extract_for_fee(x).unwrap(), TokenType::ETH);
-
-        let x = 0b000010_111110_001; // extract the first 6 bits
-        assert_eq!(TokenType::extract_for_fee(x).unwrap(), TokenType::BTC);
-
-        let x = 0b11_000000_111;
-        assert_err!(TokenType::extract_for_fee(x), "unsupported TokenType");
-
-        let mut header = 1033u16; //10_000001_001, and convert token to MLT, or 9.
-        TokenType::insert_fee_type(&mut header, TokenType::MLT);
-        assert_eq!(header, 9);
-
-        let mut improper_header = 386u16; // 110000_010 convert to token ETH: 1_110000_010
-        TokenType::insert_fee_type(&mut improper_header, TokenType::ETH);
-        assert_eq!(improper_header, 898);
     }
 }
