@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub use pallet::*;
 pub use header::*;
+pub use pallet::*;
 
 #[cfg(test)]
 mod mock;
@@ -12,8 +12,8 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
-pub mod weights;
 mod header;
+pub mod weights;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -103,27 +103,19 @@ pub mod pallet {
     }
 
     impl TXOutputHeaderImpls for TransactionOutput {
-        fn set_value_token_type(&mut self, value_token_type: TokenType) {
-            TokenType::insert_value_type(&mut self.header, value_token_type);
-        }
-
-        fn set_fee_token_type(&mut self, fee_token_type: TokenType) {
-            TokenType::insert_fee_type(&mut self.header, fee_token_type);
+        fn set_token_type(&mut self, value_token_type: TokenType) {
+            TokenType::insert(&mut self.header, value_token_type);
         }
 
         fn set_signature_method(&mut self, signature_method: SignatureMethod) {
             SignatureMethod::insert(&mut self.header, signature_method);
         }
 
-        fn extract_value_token_type(&self) -> Result<TokenType, &'static str> {
-            TokenType::extract_for_value(self.header)
+        fn get_token_type(&self) -> Result<TokenType, &'static str> {
+            TokenType::extract(self.header)
         }
 
-        fn extract_fee_token_type(&self) -> Result<TokenType, &'static str> {
-            TokenType::extract_for_fee(self.header)
-        }
-
-        fn extract_signature_method(&self) -> Result<SignatureMethod, &'static str> {
+        fn get_signature_method(&self) -> Result<SignatureMethod, &'static str> {
             SignatureMethod::extract(self.header)
         }
 
