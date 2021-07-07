@@ -26,7 +26,7 @@ benchmarks! {
         ]);
         let alice_pub_key = Public::from_h256(alice_h256.clone());
 
-        let genesis_utxo = hex!("79eabcbd5ef6e958c6a7851b36da07691c19bda1835a08f875aa286911800999");
+        let genesis_utxo = hex!("931fe49afe365072e71771cd99e13cfb54fa28fad479e23556ff9de6a3dd19a9");
         let genesis_utxo = H256::from(genesis_utxo);
 
          let mut tx = Transaction {
@@ -34,10 +34,7 @@ benchmarks! {
                 outpoint: genesis_utxo,
                 sig_script: H512::zero(),
             }],
-            outputs: vec![TransactionOutput {
-                value: 50,
-                pub_key: alice_h256,
-            }],
+            outputs: vec![TransactionOutput::new(50, alice_h256)],
         };
 
         let alice_sig = frame_support::sp_io::crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
@@ -91,10 +88,7 @@ benchmarks! {
                 outpoint: genesis_utxo.clone(),
                 sig_script: H512::zero()
             }],
-            outputs: vec![ TransactionOutput {
-                value: 50,
-                pub_key: bob_h256
-            }]
+            outputs: vec![ TransactionOutput::new(50, bob_h256)]
         };
 
         tx.inputs[0].sig_script = alice_sigscript;
