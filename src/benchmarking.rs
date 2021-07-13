@@ -26,7 +26,7 @@ benchmarks! {
         ]);
         let alice_pub_key = Public::from_h256(alice_h256.clone());
 
-        let genesis_utxo = hex!("79eabcbd5ef6e958c6a7851b36da07691c19bda1835a08f875aa286911800999");
+        let genesis_utxo = hex!("931fe49afe365072e71771cd99e13cfb54fa28fad479e23556ff9de6a3dd19a9");
         let genesis_utxo = H256::from(genesis_utxo);
 
          let mut tx = Transaction {
@@ -34,10 +34,7 @@ benchmarks! {
                 outpoint: genesis_utxo,
                 sig_script: H512::zero(),
             }],
-            outputs: vec![TransactionOutput {
-                value: 50,
-                pub_key: alice_h256,
-            }],
+            outputs: vec![TransactionOutput::new(50, alice_h256)],
         };
 
         let alice_sig = frame_support::sp_io::crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
@@ -63,9 +60,9 @@ benchmarks! {
         let alice_pub_key = Public::from_h256(alice_h256.clone());
 
         let genesis_utxo = H256::from([
-            118, 88, 65, 104, 209, 10, 32, 8, 64, 130, 237, 128,
-            236, 113, 226, 167, 131, 171, 187, 141, 214, 235, 157,
-            72, 147, 176, 137, 34, 132, 152, 233, 255]
+             81, 21, 116, 75, 236, 124, 214, 180, 35, 127, 81,
+            208, 154, 106, 21, 216, 89, 10, 92, 139, 45, 15,
+            227, 227, 206, 59, 82, 197, 34, 147, 181, 76]
         );
 
         // 0x8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48
@@ -76,14 +73,14 @@ benchmarks! {
         );
         let bob_pub_key = Public::from_h256(bob_h256.clone());
 
-        // 0x6ceab99702c60b111c12c2867679c5555c00dcd4d6ab40efa01e3a65083bfb6c6f5c1ed3356d7141ec61894153b8ba7fb413bf1e990ed99ff6dee5da1b24fd83
+        // 0x52ffd490c6b266edc96278e7dee680f0bc2454653f2eab823b8d2ec13289d770c7e0a041f32039b7f73b393f3bdd7b09295b56610b59e2165e3d34d83c9ca98f
         let alice_sigscript = H512::from([
-            108, 234, 185, 151, 2, 198, 11, 17, 28, 18, 194, 134,
-            118, 121, 197, 85, 92, 0, 220, 212, 214, 171, 64, 239,
-            160, 30, 58, 101, 8, 59, 251, 108, 111, 92, 30, 211, 53,
-            109, 113, 65, 236, 97, 137, 65, 83, 184, 186, 127, 180,
-            19, 191, 30, 153, 14, 217, 159, 246, 222, 229, 218, 27,
-            36, 253, 131]
+            82, 255, 212, 144, 198, 178, 102, 237, 201, 98, 120,
+            231, 222, 230, 128, 240, 188, 36, 84, 101, 63, 46,
+            171, 130, 59, 141, 46, 193, 50, 137, 215, 112, 199,
+            224, 160, 65, 243, 32, 57, 183, 247, 59, 57, 63, 59,
+            221, 123, 9, 41, 91, 86, 97, 11, 89, 226, 22, 94, 61,
+            52, 216, 60, 156, 169, 143]
         );
 
         let mut tx = Transaction {
@@ -91,10 +88,7 @@ benchmarks! {
                 outpoint: genesis_utxo.clone(),
                 sig_script: H512::zero()
             }],
-            outputs: vec![ TransactionOutput {
-                value: 50,
-                pub_key: bob_h256
-            }]
+            outputs: vec![ TransactionOutput::new(50, bob_h256)]
         };
 
         tx.inputs[0].sig_script = alice_sigscript;
