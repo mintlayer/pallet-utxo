@@ -187,6 +187,8 @@ pub mod pallet {
             .ok_or("No authorities")
             .unwrap();
         if share_value == 0 {
+            //put reward back if it can't be split nicely
+            <RewardTotal<T>>::put(reward as Value);
             return;
         }
 
