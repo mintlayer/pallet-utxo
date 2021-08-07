@@ -15,7 +15,7 @@
 //
 // Author(s): C. Yap
 
-use crate::{mock::*, Transaction, TransactionInput, TransactionOutput, UtxoStore, Value};
+use crate::{mock::*, Transaction, TransactionInput, TransactionOutput, UtxoStore, Value, RewardTotal};
 use codec::Encode;
 use frame_support::{
     assert_err, assert_noop, assert_ok,
@@ -202,5 +202,62 @@ fn attack_by_overspending() {
             Utxo::spend(Origin::signed(0), tx),
             "output value must not exceed input value"
         );
+    })
+}
+
+// first send 10 tokens to karl and return the rest back to alice
+// then send the rest of the tokens to karl
+#[test]
+fn tx_from_alice_to_karl() {
+    let (mut test_ext, alice_pub_key, karl_pub_key) = new_test_ext_and_keys();
+    test_ext.execute_with(|| {
+        // alice sends 10 tokens to karl and the rest back to herself
+        let mut tx = Transaction {
+            inputs: vec![tx_input_gen_no_signature()],
+            outputs: vec![
+                TransactionOutput::new(10, H256::from(karl_pub_key)),
+                TransactionOutput::new(90, H256::from(alice_pub_key)),
+            ],
+        };
+
+        let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
+        tx.inputs[0].sig_script = H512::from(alice_sig);
+
+        assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
+        let new_utxo_hash = BlakeTwo256::hash_of(&(&tx.encode(), 1 as u64));
+
+        // then send rest of the tokens to karl (proving that the first tx was successful)
+        let mut tx = Transaction {
+            inputs: vec![TransactionInput::new(new_utxo_hash, H512::zero())],
+            outputs: vec![TransactionOutput::new(90, H256::from(karl_pub_key))],
+        };
+
+        let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
+        tx.inputs[0].sig_script = H512::from(alice_sig);
+
+        assert_ok!(Utxo::spend(Origin::signed(0), tx));
+    });
+}
+
+// alice sends 90 tokens to herself and donates 10 tokens for the block authors
+#[test]
+fn test_reward() {
+    execute_with_alice(|alice_pub_key| {
+        let mut tx = Transaction {
+            inputs: vec![tx_input_gen_no_signature()],
+            outputs: vec![TransactionOutput::new(90, H256::from(alice_pub_key))],
+        };
+
+        let alice_sig = crypto::sr25519_sign(SR25519, &alice_pub_key, &tx.encode()).unwrap();
+        tx.inputs[0].sig_script = H512::from(alice_sig);
+        assert_ok!(Utxo::spend(Origin::signed(0), tx.clone()));
+
+        // if the previous spend succeeded, there should be one utxo
+        // that has a value of 90 and a reward that has a value of 10
+        let utxos = UtxoStore::<Test>::iter_values().next().unwrap().unwrap();
+        let reward = RewardTotal::<Test>::get();
+
+        assert_eq!(utxos.value, 90);
+        assert_eq!(reward, 10);
     })
 }
