@@ -38,7 +38,7 @@ pub mod pallet {
     #[cfg(feature = "std")]
     use serde::{Deserialize, Serialize};
 
-    use crate::{validate_header, SignatureMethod, TXOutputHeader, TXOutputHeaderImpls, TokenType};
+    use crate::{TXOutputHeader, OutputHeaderHelper};
     use codec::{Decode, Encode};
     use frame_support::{
         dispatch::{DispatchResultWithPostInfo, Vec},
@@ -116,28 +116,6 @@ pub mod pallet {
                 pub_key,
                 header: 0,
             }
-        }
-    }
-
-    impl TXOutputHeaderImpls for TransactionOutput {
-        fn set_token_type(&mut self, value_token_type: TokenType) {
-            TokenType::insert(&mut self.header, value_token_type);
-        }
-
-        fn set_signature_method(&mut self, signature_method: SignatureMethod) {
-            SignatureMethod::insert(&mut self.header, signature_method);
-        }
-
-        fn get_token_type(&self) -> Result<TokenType, &'static str> {
-            TokenType::extract(self.header)
-        }
-
-        fn get_signature_method(&self) -> Result<SignatureMethod, &'static str> {
-            SignatureMethod::extract(self.header)
-        }
-
-        fn validate_header(&self) -> Result<(), &'static str> {
-            validate_header(self.header)
         }
     }
 
@@ -296,11 +274,11 @@ pub mod pallet {
             ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
 
             // Check the header is valid
-            let res = output.validate_header();
-            if let Err(e) = res {
-                log::error!("Header error: {}", e);
+            let res = output.header.as_tx_output_header().validate();
+            if !res {
+                log::error!("Header error. Signature or token id is not correct!");
             }
-            ensure!(res.is_ok(), "header error. Please check the logs.");
+            ensure!(res, "header error. Please check the logs.");
 
             // checked add bug in example cod where it uses checked_sub
             total_output = total_output
