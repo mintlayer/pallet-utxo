@@ -15,7 +15,9 @@
 //
 // Author(s): C. Yap
 
-use crate::{mock::*, Transaction, TransactionInput, TransactionOutput, UtxoStore, Value, RewardTotal};
+use crate::{
+    mock::*, RewardTotal, Transaction, TransactionInput, TransactionOutput, UtxoStore, Value,
+};
 use codec::Encode;
 use frame_support::{
     assert_err, assert_noop, assert_ok,
