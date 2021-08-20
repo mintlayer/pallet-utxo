@@ -42,7 +42,7 @@ pub const ALICE_PHRASE: &str =
 
 // BlakeHash of TransactionOutput::new(100, H256::from(alice_pub_key)) in fn new_test_ext()
 pub const GENESIS_UTXO: [u8; 32] =
-    hex!("931fe49afe365072e71771cd99e13cfb54fa28fad479e23556ff9de6a3dd19a9");
+    hex!("3a6911b761bd0111409340b3032556b16be8299384a9e5bf7806ef8df7e098b0");
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
