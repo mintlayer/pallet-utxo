@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Author(s): C. Yap
+// Author(s): C. Yap, Anton Sinitsyn
 
 #[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,7 @@ use sp_core::sp_std::convert::TryFrom;
 use codec::{Decode, Encode};
 
 pub type TXOutputHeader = u128;
+pub type TokenID = u64;
 
 // Check one bit in a number
 #[inline(always)]
@@ -77,7 +78,6 @@ pub struct OutputHeader {
 
 impl OutputHeader {
     pub fn new(header: u128) -> OutputHeader {
-
         let mut offset = 0;
 
         // Signature method
@@ -138,11 +138,19 @@ impl OutputHeader {
         self.sign_method.data = sign_method as u128;
     }
 
-    pub fn token_id(&self) -> Option<TokenType> {
+    pub fn token_id(&self) -> TokenID {
+        self.token_id.data as u64
+    }
+
+    pub fn set_token_id(&mut self, token_id: TokenID) {
+        self.token_id.data = token_id as u128;
+    }
+
+    pub fn token_type(&self) -> Option<TokenType> {
         TryFrom::try_from(self.token_id.data).ok()
     }
 
-    pub fn set_token_id(&mut self, token_id: TokenType) {
+    pub fn set_token_type(&mut self, token_id: TokenType) {
         self.token_id.data = token_id as u128;
     }
 
@@ -155,7 +163,7 @@ impl OutputHeader {
     }
 
     pub fn validate(&self) -> bool {
-        self.token_id().is_some() & self.sign_method().is_some()
+        self.token_type().is_some() & self.sign_method().is_some()
     }
 }
 
@@ -206,13 +214,13 @@ u128_to_enum! {
 }
 
 u128_to_enum! {
-    #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-    #[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, Hash, Debug)]
-    pub enum TokenType {
-        MLT = 0,
-        BTC = 1,
-        }
+#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+#[derive(Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, Hash, Debug)]
+pub enum TokenType {
+    MLT = 0,
+    BTC = 1,
     }
+}
 
 #[cfg(test)]
 mod tests {
@@ -226,14 +234,19 @@ mod tests {
         assert_eq!(OutputHeader::new(0b11000_000u128).validate(), false);
 
         // Proper header
-        assert!(OutputHeader::new(0b10_0000000000000000000000000000000000000000000000000000000000000000_010u128).validate());
-        assert!(OutputHeader::new(0b01_0000000000000000000000000000000000000000000000000000000000000001_000u128).validate());
+        assert!(OutputHeader::new(
+            0b10_0000000000000000000000000000000000000000000000000000000000000000_010u128
+        )
+        .validate());
+        assert!(OutputHeader::new(
+            0b01_0000000000000000000000000000000000000000000000000000000000000001_000u128
+        )
+        .validate());
         assert!(OutputHeader::new(0u128).validate());
     }
 
     #[test]
     fn signatures() {
-
         let x = 0b11011_000u128; // last 3 bits are 000, so signature should be 0 or BLS.
         let header = OutputHeader::new(x);
         assert!(header.sign_method().is_some());
@@ -261,7 +274,6 @@ mod tests {
         // last 3 bits of header are 000. Convert to 010 for ZkSnark.
         header.set_sign_method(SignatureMethod::ZkSnark);
         assert_eq!(header.as_u128(), 186);
-
     }
 
     #[allow(dead_code)]
@@ -285,26 +297,36 @@ mod tests {
     #[test]
     fn token_types() {
         // the middle 64 bits are 000000, so type is MLT.
-        let header = OutputHeader::new(0b1010_0000000000000000000000000000000000000000000000000000000000000000_110);
-        assert!(header.token_id().is_some());
-        assert_eq!(header.token_id().unwrap(), TokenType::MLT);
+        let header = OutputHeader::new(
+            0b1010_0000000000000000000000000000000000000000000000000000000000000000_110,
+        );
+        assert!(header.token_type().is_some());
+        assert_eq!(header.token_type().unwrap(), TokenType::MLT);
 
         // the middle 64 bits are 000001, so type is BTC.
-        let header = OutputHeader::new(0b1010_0000000000000000000000000000000000000000000000000000000000000001_110);
-        assert!(header.token_id().is_some());
-        assert_eq!(header.token_id().unwrap(), TokenType::BTC);
+        let header = OutputHeader::new(
+            0b1010_0000000000000000000000000000000000000000000000000000000000000001_110,
+        );
+        assert!(header.token_type().is_some());
+        assert_eq!(header.token_type().unwrap(), TokenType::BTC);
 
         // the first 64 bits are 000010, so type is BTC.
-        assert_eq!(OutputHeader::new(0b000001_101).token_id().unwrap(), TokenType::BTC);
-        assert_eq!(OutputHeader::new(3u128).token_id().unwrap(), TokenType::MLT);
-        assert_eq!(OutputHeader::new(0b110001_000).token_id(), None);
+        assert_eq!(
+            OutputHeader::new(0b000001_101).token_type().unwrap(),
+            TokenType::BTC
+        );
+        assert_eq!(
+            OutputHeader::new(3u128).token_type().unwrap(),
+            TokenType::MLT
+        );
+        assert_eq!(OutputHeader::new(0b110001_000).token_type(), None);
 
         let mut improper_header = OutputHeader::new(321u128); // 101000_001, and must be converted to 10_001.
-        improper_header.set_token_id(TokenType::BTC);
-        assert_eq!(improper_header.as_u128(),0b000000001_001);
+        improper_header.set_token_type(TokenType::BTC);
+        assert_eq!(improper_header.as_u128(), 0b000000001_001);
 
         improper_header = OutputHeader::new(178u128); // 10110_010, and must be converted to 000000_010 or 2.
-        improper_header.set_token_id(TokenType::MLT);
+        improper_header.set_token_type(TokenType::MLT);
         assert_eq!(improper_header.as_u128(), 2);
     }
 }

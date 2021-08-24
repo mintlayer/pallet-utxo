@@ -38,7 +38,7 @@ pub mod pallet {
     #[cfg(feature = "std")]
     use serde::{Deserialize, Serialize};
 
-    use crate::{TXOutputHeader, OutputHeaderHelper};
+    use crate::{OutputHeader, OutputHeaderHelper, TXOutputHeader, TokenID};
     use codec::{Decode, Encode};
     use frame_support::{
         dispatch::{DispatchResultWithPostInfo, Vec},
@@ -230,8 +230,19 @@ pub mod pallet {
             );
         }
 
-        let mut total_input: Value = 0;
-        let mut total_output: Value = 0;
+        let input_vec: Vec<(crate::TokenID, Value)> = tx
+            .inputs
+            .iter()
+            .filter_map(|input| <UtxoStore<T>>::get(&input.outpoint))
+            .map(|output| (OutputHeader::new(output.header).token_id(), output.value))
+            .collect();
+
+        let out_vec: Vec<(crate::TokenID, Value)> = tx
+            .outputs
+            .iter()
+            .map(|output| (OutputHeader::new(output.header).token_id(), output.value))
+            .collect();
+
         let mut output_index: u64 = 0;
         let simple_tx = get_simple_transaction(tx);
 
@@ -258,9 +269,6 @@ pub mod pallet {
                     ),
                     "signature must be valid"
                 );
-                total_input = total_input
-                    .checked_add(input_utxo.value)
-                    .ok_or("input value overflow")?;
             } else {
                 missing_utxos.push(input.outpoint.clone().as_fixed_bytes().to_vec());
             }
@@ -279,22 +287,41 @@ pub mod pallet {
                 log::error!("Header error. Signature or token id is not correct!");
             }
             ensure!(res, "header error. Please check the logs.");
-
-            // checked add bug in example cod where it uses checked_sub
-            total_output = total_output
-                .checked_add(output.value)
-                .ok_or("output value overflow")?;
             new_utxos.push(hash.as_fixed_bytes().to_vec());
         }
 
         // if no race condition, check the math
         if missing_utxos.is_empty() {
-            ensure!(
-                total_input >= total_output,
-                "output value must not exceed input value"
-            );
-            reward = total_input
-                .checked_sub(total_output)
+            // We have to check sum of input tokens is less or equal to output tokens.
+            let mut inputs_sum: BTreeMap<TokenID, Value> = BTreeMap::new();
+            let mut outputs_sum: BTreeMap<TokenID, Value> = BTreeMap::new();
+
+            for x in input_vec {
+                let value =
+                    x.1.checked_add(*inputs_sum.get(&x.0).unwrap_or(&0))
+                        .ok_or("input value overflow")?;
+                inputs_sum.insert(x.0, value);
+            }
+            for x in out_vec {
+                let value =
+                    x.1.checked_add(*outputs_sum.get(&x.0).unwrap_or(&0))
+                        .ok_or("output value overflow")?;
+                outputs_sum.insert(x.0, value);
+            }
+
+            for output_token in &outputs_sum {
+                match inputs_sum.get(&output_token.0) {
+                    Some(input_value) => ensure!(
+                        input_value >= &output_token.1,
+                        "output value must not exceed input value"
+                    ),
+                    None => frame_support::fail!("input for the token not found"),
+                }
+            }
+
+            // Reward at the moment only in MLT
+            reward = inputs_sum[&(crate::TokenType::MLT as TokenID)]
+                .checked_sub(outputs_sum[&(crate::TokenType::MLT as TokenID)])
                 .ok_or("reward underflow")?;
         }
 
@@ -345,6 +372,7 @@ pub mod pallet {
             let tx_validity = validate_transaction::<T>(&tx)?;
             ensure!(tx_validity.requires.is_empty(), "missing inputs");
 
+            // Now in tx_validity.priority only amount of MLT
             update_storage::<T>(&tx, tx_validity.priority as Value)?;
 
             Self::deposit_event(Event::<T>::TransactionSuccess(tx));
