@@ -1,5 +1,23 @@
+// Copyright (c) 2021 RBB S.r.l
+// opensource@mintlayer.org
+// SPDX-License-Identifier: MIT
+// Licensed under the MIT License;
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://spdx.org/licenses/MIT
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Author(s): C. Yap
+
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub use header::*;
 pub use pallet::*;
 
 #[cfg(test)]
@@ -11,23 +29,30 @@ mod tests;
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
 
+mod header;
+pub mod weights;
+
 #[frame_support::pallet]
 pub mod pallet {
     use core::marker::PhantomData;
     #[cfg(feature = "std")]
     use serde::{Deserialize, Serialize};
 
+    use crate::{OutputHeader, OutputHeaderHelper, TXOutputHeader, TokenID};
     use codec::{Decode, Encode};
     use frame_support::{
         dispatch::{DispatchResultWithPostInfo, Vec},
         pallet_prelude::*,
+        sp_io::crypto,
+        sp_runtime::traits::{BlakeTwo256, Dispatchable, Hash, SaturatedConversion},
+        traits::IsSubType,
     };
     use frame_system::pallet_prelude::*;
-    use primitive_types::{H256, H512};
-    use sp_core::sr25519::{Public as SR25Pub, Signature as SR25Sig};
-    use sp_io::crypto;
-    use sp_runtime::traits::{BlakeTwo256, Hash, SaturatedConversion};
-    use sp_std::collections::btree_map::BTreeMap;
+    use sp_core::{
+        sp_std::collections::btree_map::BTreeMap,
+        sr25519::{Public as SR25Pub, Signature as SR25Sig},
+        H256, H512,
+    };
 
     pub type Value = u128;
 
@@ -40,8 +65,16 @@ pub mod pallet {
     pub trait Config: frame_system::Config {
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
-        // let the user implement on how to get the authorities.
+        /// The overarching call type.
+        type Call: Dispatchable + From<Call<Self>> + IsSubType<Call<Self>> + Clone;
+
+        type WeightInfo: WeightInfo;
+
         fn authorities() -> Vec<H256>;
+    }
+
+    pub trait WeightInfo {
+        fn spend(u: u32) -> Weight;
     }
 
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -53,6 +86,15 @@ pub mod pallet {
         pub(crate) sig_script: H512,
     }
 
+    impl TransactionInput {
+        pub fn new(outpoint: H256, sig_script: H512) -> Self {
+            Self {
+                outpoint,
+                sig_script,
+            }
+        }
+    }
+
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
     #[derive(
         Clone, Encode, Decode, Eq, PartialEq, PartialOrd, Ord, RuntimeDebug, Hash, Default,
@@ -60,6 +102,21 @@ pub mod pallet {
     pub struct TransactionOutput {
         pub(crate) value: Value,
         pub(crate) pub_key: H256,
+        pub(crate) header: TXOutputHeader,
+    }
+
+    impl TransactionOutput {
+        /// By default the header is 0:
+        /// token type for both the value and fee is MLT,
+        /// and the signature method is BLS.
+        /// functions are available in TXOutputHeaderImpls to update the header.
+        pub fn new(value: Value, pub_key: H256) -> Self {
+            Self {
+                value,
+                pub_key,
+                header: 0,
+            }
+        }
     }
 
     #[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
@@ -108,6 +165,8 @@ pub mod pallet {
             .ok_or("No authorities")
             .unwrap();
         if share_value == 0 {
+            //put reward back if it can't be split nicely
+            <RewardTotal<T>>::put(reward as Value);
             return;
         }
 
@@ -116,13 +175,13 @@ pub mod pallet {
             .ok_or("Sub underflow")
             .unwrap();
 
+        log::debug!("disperse_reward:: reward total: {:?}", remainder);
         <RewardTotal<T>>::put(remainder as Value);
 
         for authority in auths {
-            let utxo = TransactionOutput {
-                value: share_value,
-                pub_key: *authority,
-            };
+            // TODO: where do we get the header info?
+            // TODO: are the rewards always of MLT token type?
+            let utxo = TransactionOutput::new(share_value, *authority);
 
             let hash = {
                 let b_num = block_number.saturated_into::<u64>();
@@ -131,8 +190,6 @@ pub mod pallet {
 
             if !<UtxoStore<T>>::contains_key(hash) {
                 <UtxoStore<T>>::insert(hash, Some(utxo));
-                sp_runtime::print("transaction reward sent to");
-                sp_runtime::print(hash.as_fixed_bytes() as &[u8]);
             }
         }
     }
@@ -173,8 +230,19 @@ pub mod pallet {
             );
         }
 
-        let mut total_input: Value = 0;
-        let mut total_output: Value = 0;
+        let input_vec: Vec<(crate::TokenID, Value)> = tx
+            .inputs
+            .iter()
+            .filter_map(|input| <UtxoStore<T>>::get(&input.outpoint))
+            .map(|output| (OutputHeader::new(output.header).token_id(), output.value))
+            .collect();
+
+        let out_vec: Vec<(crate::TokenID, Value)> = tx
+            .outputs
+            .iter()
+            .map(|output| (OutputHeader::new(output.header).token_id(), output.value))
+            .collect();
+
         let mut output_index: u64 = 0;
         let simple_tx = get_simple_transaction(tx);
 
@@ -201,9 +269,6 @@ pub mod pallet {
                     ),
                     "signature must be valid"
                 );
-                total_input = total_input
-                    .checked_add(input_utxo.value)
-                    .ok_or("input value overflow")?;
             } else {
                 missing_utxos.push(input.outpoint.clone().as_fixed_bytes().to_vec());
             }
@@ -216,21 +281,47 @@ pub mod pallet {
             output_index = output_index.checked_add(1).ok_or("output index overflow")?;
             ensure!(!<UtxoStore<T>>::contains_key(hash), "output already exists");
 
-            // checked add bug in example cod where it uses checked_sub
-            total_output = total_output
-                .checked_add(output.value)
-                .ok_or("output value overflow")?;
+            // Check the header is valid
+            let res = output.header.as_tx_output_header().validate();
+            if !res {
+                log::error!("Header error. Signature or token id is not correct!");
+            }
+            ensure!(res, "header error. Please check the logs.");
             new_utxos.push(hash.as_fixed_bytes().to_vec());
         }
 
         // if no race condition, check the math
         if missing_utxos.is_empty() {
-            ensure!(
-                total_input >= total_output,
-                "output value must not exceed input value"
-            );
-            reward = total_input
-                .checked_sub(total_output)
+            // We have to check sum of input tokens is less or equal to output tokens.
+            let mut inputs_sum: BTreeMap<TokenID, Value> = BTreeMap::new();
+            let mut outputs_sum: BTreeMap<TokenID, Value> = BTreeMap::new();
+
+            for x in input_vec {
+                let value =
+                    x.1.checked_add(*inputs_sum.get(&x.0).unwrap_or(&0))
+                        .ok_or("input value overflow")?;
+                inputs_sum.insert(x.0, value);
+            }
+            for x in out_vec {
+                let value =
+                    x.1.checked_add(*outputs_sum.get(&x.0).unwrap_or(&0))
+                        .ok_or("output value overflow")?;
+                outputs_sum.insert(x.0, value);
+            }
+
+            for output_token in &outputs_sum {
+                match inputs_sum.get(&output_token.0) {
+                    Some(input_value) => ensure!(
+                        input_value >= &output_token.1,
+                        "output value must not exceed input value"
+                    ),
+                    None => frame_support::fail!("input for the token not found"),
+                }
+            }
+
+            // Reward at the moment only in MLT
+            reward = inputs_sum[&(crate::TokenType::MLT as TokenID)]
+                .checked_sub(outputs_sum[&(crate::TokenType::MLT as TokenID)])
                 .ok_or("reward underflow")?;
         }
 
@@ -238,7 +329,7 @@ pub mod pallet {
             priority: reward as u64,
             requires: missing_utxos,
             provides: new_utxos,
-            longevity: TransactionLongevity::max_value(),
+            longevity: TransactionLongevity::MAX,
             propagate: true,
         })
     }
@@ -254,10 +345,12 @@ pub mod pallet {
             .checked_add(reward)
             .ok_or("Reward overflow")?;
 
+        log::debug!("update_storage:: reward total: {:?}", new_total);
         <RewardTotal<T>>::put(new_total);
 
         // Removing spent UTXOs
         for input in &tx.inputs {
+            log::debug!("removing {:?} in UtxoStore.", input.outpoint);
             <UtxoStore<T>>::remove(input.outpoint);
         }
 
@@ -265,6 +358,7 @@ pub mod pallet {
         for output in &tx.outputs {
             let hash = BlakeTwo256::hash_of(&(&tx.encode(), index));
             index = index.checked_add(1).ok_or("output index overflow")?;
+            log::debug!("inserting to UtxoStore {:?} as key {:?}", output, hash);
             <UtxoStore<T>>::insert(hash, Some(output));
         }
 
@@ -273,11 +367,12 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        #[pallet::weight(1_000)] // <--- haven't figured out what's this for
+        #[pallet::weight(T::WeightInfo::spend(tx.inputs.len().saturating_add(tx.outputs.len()) as u32))]
         pub fn spend(_origin: OriginFor<T>, tx: Transaction) -> DispatchResultWithPostInfo {
             let tx_validity = validate_transaction::<T>(&tx)?;
             ensure!(tx_validity.requires.is_empty(), "missing inputs");
 
+            // Now in tx_validity.priority only amount of MLT
             update_storage::<T>(&tx, tx_validity.priority as Value)?;
 
             Self::deposit_event(Event::<T>::TransactionSuccess(tx));

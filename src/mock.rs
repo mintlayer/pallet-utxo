@@ -1,18 +1,35 @@
+// Copyright (c) 2021 RBB S.r.l
+// opensource@mintlayer.org
+// SPDX-License-Identifier: MIT
+// Licensed under the MIT License;
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// 	http://spdx.org/licenses/MIT
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Author(s): C. Yap
+
 use crate as pallet_utxo;
 use pallet_utxo::TransactionOutput;
 
-use frame_support::{parameter_types, traits::GenesisBuild};
-use sp_core::{sr25519::Public, testing::SR25519, H256};
-use sp_io::TestExternalities;
-use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
-use sp_runtime::{
-    testing::Header,
-    traits::{BlakeTwo256, IdentityLookup},
+use frame_support::{
+    parameter_types,
+    sp_io::TestExternalities,
+    sp_runtime::{
+        testing::Header,
+        traits::{BlakeTwo256, IdentityLookup},
+    },
+    traits::GenesisBuild,
 };
-
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-
-// use sp_std::vec;
+use sp_core::{sp_std::vec, sr25519::Public, testing::SR25519, H256};
+use sp_keystore::{testing::KeyStore, KeystoreExt, SyncCryptoStore};
 
 // need to manually import this crate since its no include by default
 use hex_literal::hex;
@@ -22,8 +39,10 @@ pub type Block = frame_system::mocking::MockBlock<Test>;
 
 pub const ALICE_PHRASE: &str =
     "news slush supreme milk chapter athlete soap sausage put clutch what kitten";
+
+// BlakeHash of TransactionOutput::new(100, H256::from(alice_pub_key)) in fn new_test_ext()
 pub const GENESIS_UTXO: [u8; 32] =
-    hex!("79eabcbd5ef6e958c6a7851b36da07691c19bda1835a08f875aa286911800999");
+    hex!("3a6911b761bd0111409340b3032556b16be8299384a9e5bf7806ef8df7e098b0");
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
@@ -32,10 +51,10 @@ frame_support::construct_runtime!(
         NodeBlock = Block,
         UncheckedExtrinsic = UncheckedExtrinsic,
     {
-        System: frame_system::{Module, Call, Config, Storage, Event<T>},
-        Timestamp: pallet_timestamp::{Module, Call, Storage, Inherent},
-        Utxo: pallet_utxo::{Module, Call, Config<T>, Storage, Event<T>},
-        Aura: pallet_aura::{Module, Call, Config<T>, Storage},
+        System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
+        Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
+        Utxo: pallet_utxo::{Pallet, Call, Config<T>, Storage, Event<T>},
+        Aura: pallet_aura::{Pallet, Call, Config<T>, Storage},
     }
 );
 
@@ -72,6 +91,7 @@ impl frame_system::Config for Test {
     type OnKilledAccount = ();
     type SystemWeightInfo = ();
     type SS58Prefix = SS58Prefix;
+    type OnSetCode = ();
 }
 
 // required by pallet_aura
@@ -88,6 +108,8 @@ impl pallet_aura::Config for Test {
 
 impl pallet_utxo::Config for Test {
     type Event = Event;
+    type Call = Call;
+    type WeightInfo = crate::weights::WeightInfo<Test>;
 
     fn authorities() -> Vec<H256> {
         Aura::authorities()
@@ -111,11 +133,9 @@ pub fn new_test_ext() -> TestExternalities {
     let mut t = frame_system::GenesisConfig::default()
         .build_storage::<Test>()
         .unwrap();
+
     pallet_utxo::GenesisConfig::<Test> {
-        genesis_utxos: vec![TransactionOutput {
-            value: 100,
-            pub_key: H256::from(alice_pub_key),
-        }],
+        genesis_utxos: vec![TransactionOutput::new(100, H256::from(alice_pub_key))],
         _marker: Default::default(),
     }
     .assimilate_storage(&mut t)
@@ -139,10 +159,7 @@ pub fn new_test_ext_and_keys() -> (TestExternalities, Public, Public) {
         .build_storage::<Test>()
         .unwrap();
     pallet_utxo::GenesisConfig::<Test> {
-        genesis_utxos: vec![TransactionOutput {
-            value: 100,
-            pub_key: H256::from(alice_pub_key),
-        }],
+        genesis_utxos: vec![TransactionOutput::new(100, H256::from(alice_pub_key))],
         _marker: Default::default(),
     }
     .assimilate_storage(&mut t)
